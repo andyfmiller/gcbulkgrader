@@ -8,14 +8,26 @@
 
 <h2>@Model.CourseName Grades</h2>
 
-<table class="table-bordered">
+<table class="table table-bordered">
     <thead>
     <tr>
-        <th>Stu</th>
+        <th></th>
         @foreach (var assignment in Model.Assignments)
         {
             <th>@assignment.CourseWorkName</th>
         }
     </tr>
     </thead>
+    <tbody>
+        @foreach (var student in Model.Students)
+        {
+            <tr>
+                <td>@student.StudentName</td>
+                @foreach (var assignment in Model.Assignments)
+                {
+                    <td>@assignment.MaxPoints</td>
+                }
+            </tr>
+        }
+    </tbody>
 </table>
