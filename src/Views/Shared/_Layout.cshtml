@@ -27,11 +27,10 @@
                     <span class="icon-bar"></span>
                 </button>
                 <a asp-area="" asp-controller="Home" asp-action="Index" class="navbar-brand">gcbulkgrader</a>
+                <div class="navbar-text">@ViewBag.PersonName</div>
             </div>
             <div class="navbar-collapse collapse">
                 <ul class="nav navbar-nav">
-                    <li><a asp-area="" asp-controller="Grader" asp-action="Index">Grader</a></li>
-                    <li><a asp-area="" asp-controller="Home" asp-action="About">About</a></li>
                 </ul>
             </div>
         </div>

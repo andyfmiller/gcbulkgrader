@@ -1,0 +1,21 @@
+﻿@model GradingModel
+
+@{
+    ViewBag.Title = "Update Grades";
+    ViewBag.PersonName = Model.PersonName;
+    Layout = "_Layout";
+}
+
+<h2>@Model.CourseName Grades</h2>
+
+<table class="table-bordered">
+    <thead>
+    <tr>
+        <th>Stu</th>
+        @foreach (var assignment in Model.Assignments)
+        {
+            <th>@assignment.CourseWorkName</th>
+        }
+    </tr>
+    </thead>
+</table>

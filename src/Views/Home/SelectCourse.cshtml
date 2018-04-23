@@ -1,0 +1,46 @@
+﻿@model CourseSelectionModel
+
+@{
+    ViewBag.Title = "Select a Course";
+    ViewBag.PersonName = Model.PersonName;
+    Layout = "_Layout";
+}
+
+<h2>@ViewBag.Title</h2>
+
+@using (Html.BeginForm("BulkGrade", "Home", FormMethod.Get))
+{
+    @Html.HiddenFor(m => m.PersonName)
+    @Html.HiddenFor(m => m.UserId)
+
+    <div class="form-group vertical-spacing">
+        @Html.DropDownList("courseId", Model.Courses, "Choose course", new
+        {
+            classs = "form-control",
+            onChange = "toggleSubmit()"
+        })
+    </div>
+
+    <div class="form-group vertical-spacing">
+        <button id="submit" type="submit" class="btn btn-primary disabled" disabled="disabled">Next</button>
+    </div>
+}
+
+@section Scripts {
+
+    <script type="text/javascript">
+
+        function toggleSubmit() {
+            const submit = $("#submit");
+            if ($("#courseId").val() == "") {
+                submit.addClass("disabled");
+                submit.attr("disabled", "disabled");
+            } else {
+                submit.removeClass("disabled");
+                submit.removeAttr("disabled");
+            }
+        }
+
+    </script>
+}
+
