@@ -8,6 +8,6 @@ namespace gcbulkgrader.Models
         public string CourseName { get; set; }
         public IList<AssignmentModel> Assignments { get; set; }
         public IList<StudentModel> Students { get; set; }
-        public IList<AssignmentGrade> Grades { get; set; }
+        public AssignmentGrades[] AssignmentGrades { get; set; }
     }
 }

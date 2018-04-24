@@ -8,33 +8,55 @@
 
 <h2>@Model.CourseName Grades</h2>
 
-<table class="table table-bordered">
-    <thead>
-    <tr>
-        <th></th>
-        @foreach (var assignment in Model.Assignments)
-        {
-            <th>@assignment.CourseWorkName</th>
-        }
-    </tr>
-    </thead>
-    <tbody>
-        @foreach (var student in Model.Students)
-        {
+@using (Html.BeginForm("BulkGrade", "Home", FormMethod.Post))
+{
+    @Html.HiddenFor(m => m.UserId)
+    @Html.HiddenFor(m => m.PersonName)
+    @Html.HiddenFor(m => m.CourseId)
+    @Html.HiddenFor(m => m.CourseName)
+
+    <button id="submit" type="submit" class="btn btn-info">Save</button>
+
+    <table class="table table-bordered">
+        <thead>
             <tr>
-                <td>@student.StudentName</td>
+                <th></th>
                 @foreach (var assignment in Model.Assignments)
                 {
-                    var grade = Model.Grades.SingleOrDefault
-                        (
-                            g => g.StudentId == student.StudentId 
-                                 && g.CourseWorkId == assignment.CourseWorkId
-                        );
-                    <td>
-                        @grade?.AssignedGrade / @assignment.MaxPoints
-                    </td>
+                    var assignmentIndex = Model.Assignments.IndexOf(assignment);
+
+                    <th>
+                        @Html.HiddenFor(m => m.Assignments[assignmentIndex].CourseWorkName)
+                        @Html.HiddenFor(m => m.Assignments[assignmentIndex].CourseWorkId)
+                        @Html.HiddenFor(m => m.Assignments[assignmentIndex].MaxPoints)
+                        @assignment.CourseWorkName
+                    </th>
                 }
             </tr>
-        }
-    </tbody>
-</table>
+        </thead>
+        <tbody>
+            @foreach (var student in Model.Students)
+            {
+                var studentIndex = Model.Students.IndexOf(student);
+
+                <tr>
+                    <td>
+                        @Html.HiddenFor(m => m.Students[studentIndex].StudentId)
+                        @Html.HiddenFor(m => m.Students[studentIndex].StudentName)
+                        @student.StudentName
+                    </td>
+
+                    @foreach (var assignment in Model.Assignments)
+                    {
+                        var assignmentIndex = Model.Assignments.IndexOf(assignment);
+
+                        <td>
+                            @Html.TextBoxFor(m => m.AssignmentGrades[assignmentIndex].Grades[studentIndex])
+                            / @assignment.MaxPoints
+                        </td>
+                    }
+                </tr>
+            }
+        </tbody>
+    </table>
+}
