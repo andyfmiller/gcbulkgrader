@@ -218,6 +218,42 @@ namespace gcbulkgrader.Controllers
                 return StatusCode(StatusCodes.Status500InternalServerError, e);
             }
 
+            try
+            {
+                // Get the student submissions
+                using (var classroomService = new ClassroomService(new BaseClientService.Initializer
+                {
+                    HttpClientInitializer = credential,
+                    ApplicationName = "gc2lti"
+                }))
+                {
+                    foreach (var assignment in model.Assignments)
+                    {
+                        var request =
+                            classroomService.Courses.CourseWork.StudentSubmissions.List(model.CourseId,
+                                assignment.CourseWorkId);
+                        var response = await request.ExecuteAsync(cancellationToken).ConfigureAwait(false);
+
+                        model.Grades = new List<AssignmentGrade>();
+                        foreach (var submission in response.StudentSubmissions)
+                        {
+                            model.Grades.Add(new AssignmentGrade
+                            {
+                                CourseId = submission.CourseId,
+                                CourseWorkId = submission.CourseWorkId,
+                                SubmissionId = submission.Id,
+                                StudentId = submission.UserId,
+                                AssignedGrade = submission.AssignedGrade
+                            });
+                        }
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                return StatusCode(StatusCodes.Status500InternalServerError, e);
+            }
+
             return View(model);
         }
     }

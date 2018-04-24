@@ -25,7 +25,14 @@
                 <td>@student.StudentName</td>
                 @foreach (var assignment in Model.Assignments)
                 {
-                    <td>@assignment.MaxPoints</td>
+                    var grade = Model.Grades.SingleOrDefault
+                        (
+                            g => g.StudentId == student.StudentId 
+                                 && g.CourseWorkId == assignment.CourseWorkId
+                        );
+                    <td>
+                        @grade?.AssignedGrade / @assignment.MaxPoints
+                    </td>
                 }
             </tr>
         }
