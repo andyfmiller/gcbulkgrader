@@ -244,7 +244,11 @@ namespace gcbulkgrader.Controllers
                         var response = await request.ExecuteAsync(cancellationToken).ConfigureAwait(false);
 
                         var assignmentIndex = gradingModel.Assignments.IndexOf(assignment);
-                        gradingModel.AssignmentGrades[assignmentIndex] = new AssignmentGrades();
+                        gradingModel.AssignmentGrades[assignmentIndex] =
+                            new AssignmentGrades
+                            {
+                                Grades = new double?[gradingModel.Students.Count]
+                            };
 
                         foreach (var submission in response.StudentSubmissions)
                         {
@@ -252,7 +256,6 @@ namespace gcbulkgrader.Controllers
                             if (student == null) continue;
 
                             var studentIndex = gradingModel.Students.IndexOf(student);
-                            gradingModel.AssignmentGrades[assignmentIndex].Grades = new double?[gradingModel.Students.Count];
                             gradingModel.AssignmentGrades[assignmentIndex].Grades[studentIndex] = submission.AssignedGrade;
                         }
                     }
@@ -269,6 +272,67 @@ namespace gcbulkgrader.Controllers
         [HttpPost]
         public async Task<IActionResult> BulkGrade(CancellationToken cancellationToken, GradingModel model)
         {
+            var appFlow = new AppFlowMetadata(ClientId, ClientSecret);
+            var token = await appFlow.Flow.LoadTokenAsync(model.UserId, cancellationToken);
+            var credential = new UserCredential(appFlow.Flow, model.UserId, token);
+
+            using (var classroomService = new ClassroomService(new BaseClientService.Initializer
+            {
+                HttpClientInitializer = credential,
+                ApplicationName = "gc2lti"
+            }))
+            {
+                for (var assignmentIndex = 0; assignmentIndex < model.AssignmentGrades.Length; assignmentIndex++)
+                {
+                    var assignmentGrades = model.AssignmentGrades[assignmentIndex];
+                    var assignment = model.Assignments[assignmentIndex];
+
+                    // Get the coursework
+                    var courseWorkRequest = classroomService.Courses.CourseWork.Get
+                    (
+                        model.CourseId,
+                        assignment.CourseWorkId
+                    );
+
+                    //var courseWork = await courseWorkRequest.ExecuteAsync(cancellationToken)
+                    //    .ConfigureAwait(false);
+
+                    // Get the students' submissions
+                    var submissionsRequest = classroomService.Courses.CourseWork.StudentSubmissions.List
+                    (
+                        model.CourseId,
+                        assignment.CourseWorkId
+                    );
+                    var submissionsResponse = await submissionsRequest.ExecuteAsync(cancellationToken)
+                        .ConfigureAwait(false);
+
+                    for (var studentIndex = 0; studentIndex < assignmentGrades.Grades.Length; studentIndex++)
+                    {
+                        var grade = assignmentGrades.Grades[studentIndex];
+                        var student = model.Students[studentIndex];
+
+                        var submission = submissionsResponse.StudentSubmissions
+                            .SingleOrDefault(s => s.UserId == student.StudentId);
+
+                        if (submission != null)
+                        {
+                            submission.AssignedGrade = grade;
+                            submission.DraftGrade = grade;
+
+                            var patchRequest = classroomService.Courses.CourseWork.StudentSubmissions.Patch
+                            (
+                                submission,
+                                submission.CourseId,
+                                submission.CourseWorkId,
+                                submission.Id
+                            );
+                            patchRequest.UpdateMask = "AssignedGrade,DraftGrade";
+                            await patchRequest.ExecuteAsync(cancellationToken).ConfigureAwait(false);
+                        }
+                    }
+                }
+            }
+
             var courseModel = new CourseModel
             {
                 CourseId = model.CourseId,

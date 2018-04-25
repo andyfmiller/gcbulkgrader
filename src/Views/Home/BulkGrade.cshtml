@@ -15,12 +15,15 @@
     @Html.HiddenFor(m => m.CourseId)
     @Html.HiddenFor(m => m.CourseName)
 
-    <button id="submit" type="submit" class="btn btn-info">Save</button>
+    <div class="form-group">
+        <button id="submit" type="submit" class="btn btn-info">Save</button>
+    </div>
 
-    <table class="table table-bordered">
-        <thead>
+    <div class="form-group">
+        <table class="table table-bordered">
+            <thead>
             <tr>
-                <th></th>
+                <th>Student</th>
                 @foreach (var assignment in Model.Assignments)
                 {
                     var assignmentIndex = Model.Assignments.IndexOf(assignment);
@@ -33,8 +36,8 @@
                     </th>
                 }
             </tr>
-        </thead>
-        <tbody>
+            </thead>
+            <tbody>
             @foreach (var student in Model.Students)
             {
                 var studentIndex = Model.Students.IndexOf(student);
@@ -51,12 +54,16 @@
                         var assignmentIndex = Model.Assignments.IndexOf(assignment);
 
                         <td>
-                            @Html.TextBoxFor(m => m.AssignmentGrades[assignmentIndex].Grades[studentIndex])
-                            / @assignment.MaxPoints
+                            <div class="input-group input-group-sm">
+                                @Html.TextBoxFor(m => m.AssignmentGrades[assignmentIndex].Grades[studentIndex], 
+                                    new {@class="form-control", type = "number", min = "0", max = assignment.MaxPoints})
+                                <span class="input-group-addon">/ @assignment.MaxPoints</span>
+                            </div>
                         </td>
                     }
                 </tr>
             }
-        </tbody>
-    </table>
+            </tbody>
+        </table>
+    </div>
 }
