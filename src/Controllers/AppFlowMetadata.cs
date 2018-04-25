@@ -26,8 +26,6 @@ namespace gcbulkgrader.Controllers
                         ClassroomService.Scope.ClassroomProfileEmails,
                         ClassroomService.Scope.ClassroomProfilePhotos,
                         ClassroomService.Scope.ClassroomRostersReadonly,
-                        //ClassroomService.Scope.ClassroomCourseworkMeReadonly,
-                        //ClassroomService.Scope.ClassroomCourseworkStudentsReadonly,
                         ClassroomService.Scope.ClassroomCourseworkStudents
                     },
                     DataStore = new FileDataStore("Classroom.Api.Auth.Store")

@@ -48,7 +48,8 @@ namespace gcbulkgrader.Controllers
             return View(new ErrorViewModel {RequestId = Activity.Current?.Id ?? HttpContext.TraceIdentifier});
         }
 
-        public async Task<IActionResult> SelectCourse(CancellationToken cancellationToken, CourseSelectionModel model)
+        [HttpGet]
+        public async Task<IActionResult> SelectCourse(CancellationToken cancellationToken)
         {
             var result = await new AuthorizationCodeMvcApp(this, new AppFlowMetadata(ClientId, ClientSecret))
                 .AuthorizeAsync(cancellationToken)
@@ -59,9 +60,11 @@ namespace gcbulkgrader.Controllers
                 return Redirect(result.RedirectUri);
             }
 
-            model.UserId = result.Credential.UserId;
+            var model = new CourseSelectionModel
+            {
+                UserId = result.Credential.UserId
+            };
 
-            // Get the list of courses
             try
             {
                 using (var classroomService = new ClassroomService(new BaseClientService.Initializer
@@ -73,14 +76,17 @@ namespace gcbulkgrader.Controllers
                     // Get the user's name
                     var profileRequest = classroomService.UserProfiles.Get("me");
                     var profile = await profileRequest.ExecuteAsync(cancellationToken).ConfigureAwait(false);
+                    model.PersonImage = profile.PhotoUrl;
                     model.PersonName = profile.Name.FullName;
 
                     // Get the list of the user's courses
+                    model.Courses = new List<CourseModel>();
+
                     var coursesRequest = classroomService.Courses.List();
                     coursesRequest.CourseStates = CoursesResource.ListRequest.CourseStatesEnum.ACTIVE;
                     coursesRequest.TeacherId = "me";
+
                     ListCoursesResponse coursesResponse = null;
-                    var courses = new List<SelectListItem>();
                     do
                     {
                         if (coursesResponse != null)
@@ -92,18 +98,16 @@ namespace gcbulkgrader.Controllers
                             await coursesRequest.ExecuteAsync(cancellationToken).ConfigureAwait(false);
                         if (coursesResponse.Courses != null)
                         {
-                            courses.AddRange
-                            (
-                                coursesResponse.Courses.Select(c => new SelectListItem
+                            foreach (var course in coursesResponse.Courses)
+                            {
+                                model.Courses.Add(new CourseModel
                                 {
-                                    Value = c.Id,
-                                    Text = c.Name
-                                })
-                            );
+                                    CourseId = course.Id,
+                                    CourseName = course.Name
+                                });
+                            }
                         }
                     } while (!string.IsNullOrEmpty(coursesResponse.NextPageToken));
-
-                    model.Courses = new SelectList(courses, "Value", "Text");
 
                     return View(model);
                 }
@@ -112,18 +116,34 @@ namespace gcbulkgrader.Controllers
             {
                 // Force a new UserId
                 TempData.Remove("user");
-                return RedirectToAction("SelectCourse", model);
+                return RedirectToAction("SelectCourse");
             }
             catch (TokenResponseException e) when (e.Message.Contains("invalid_grant"))
             {
                 // Force a new UserId
                 TempData.Remove("user");
-                return RedirectToAction("SelectCourse", model);
+                return RedirectToAction("SelectCourse");
             }
             catch (Exception e)
             {
                 return StatusCode(StatusCodes.Status500InternalServerError, e);
             }
+        }
+
+        [HttpPost]
+        public IActionResult SelectCourse(CancellationToken cancellationToken, CourseSelectionModel model)
+        {
+            var courseModel = model.Courses.SingleOrDefault(c => c.CourseId == model.CourseId);
+            if (courseModel == null)
+            {
+                return RedirectToAction("SelectCourse");
+            }
+
+            courseModel.PersonImage = model.PersonImage;
+            courseModel.PersonName = model.PersonName;
+            courseModel.UserId = model.UserId;
+
+            return RedirectToAction(nameof(BulkGrade), courseModel);
         }
 
         [HttpGet]
@@ -135,130 +155,24 @@ namespace gcbulkgrader.Controllers
 
             var gradingModel = new GradingModel
             {
+                PersonImage = model.PersonImage,
                 PersonName = model.PersonName,
-                UserId = model.UserId
+                UserId = model.UserId,
+                CourseId = model.CourseId,
+                CourseName = model.CourseName
             };
 
             try
             {
-                // Get the course name
                 using (var classroomService = new ClassroomService(new BaseClientService.Initializer
                 {
                     HttpClientInitializer = credential,
                     ApplicationName = "gc2lti"
                 }))
                 {
-                    var request = classroomService.Courses.Get(model.CourseId);
-                    var response = await request.ExecuteAsync(cancellationToken).ConfigureAwait(false);
-
-                    gradingModel.CourseName = response.Name;
-                }
-            }
-            catch (Exception e)
-            {
-                return StatusCode(StatusCodes.Status500InternalServerError, e);
-            }
-
-            // Get the list of assignments
-            try
-            {
-                using (var classroomService = new ClassroomService(new BaseClientService.Initializer
-                {
-                    HttpClientInitializer = credential,
-                    ApplicationName = "gc2lti"
-                }))
-                {
-                    var request = classroomService.Courses.CourseWork.List(model.CourseId);
-                    var response = await request.ExecuteAsync(cancellationToken).ConfigureAwait(false);
-
-                    gradingModel.Assignments = new List<AssignmentModel>();
-                    foreach (var courseWork in response.CourseWork)
-                    {
-                        if (courseWork.AssociatedWithDeveloper.HasValue
-                            && courseWork.AssociatedWithDeveloper.Value
-                            && courseWork.MaxPoints.HasValue
-                            && courseWork.MaxPoints.Value > 0)
-                        {
-                            gradingModel.Assignments.Add(new AssignmentModel
-                            {
-                                CourseWorkId = courseWork.Id,
-                                CourseWorkName = courseWork.Title,
-                                MaxPoints = courseWork.MaxPoints.Value
-                            });
-                        }
-                    }
-                }
-            }
-            catch (Exception e)
-            {
-                return StatusCode(StatusCodes.Status500InternalServerError, e);
-            }
-
-            // Get the list of students
-            try
-            {
-                using (var classroomService = new ClassroomService(new BaseClientService.Initializer
-                {
-                    HttpClientInitializer = credential,
-                    ApplicationName = "gc2lti"
-                }))
-                {
-                    var request = classroomService.Courses.Students.List(model.CourseId);
-                    var response = await request.ExecuteAsync(cancellationToken).ConfigureAwait(false);
-
-                    gradingModel.Students = new List<StudentModel>();
-                    foreach (var student in response.Students)
-                    {
-                        gradingModel.Students.Add(new StudentModel
-                        {
-                            StudentId = student.UserId,
-                            StudentName = student.Profile.Name.FullName
-                        });
-                    }
-                }
-            }
-            catch (Exception e)
-            {
-                return StatusCode(StatusCodes.Status500InternalServerError, e);
-            }
-
-            // Fill in the grades
-
-            gradingModel.AssignmentGrades = new AssignmentGrades[gradingModel.Assignments.Count];
-
-            try
-            {
-                using (var classroomService = new ClassroomService(new BaseClientService.Initializer
-                {
-                    HttpClientInitializer = credential,
-                    ApplicationName = "gc2lti"
-                }))
-                {
-                    foreach (var assignment in gradingModel.Assignments)
-                    {
-                        var request = classroomService.Courses.CourseWork.StudentSubmissions.List
-                        (
-                            model.CourseId,
-                            assignment.CourseWorkId
-                        );
-                        var response = await request.ExecuteAsync(cancellationToken).ConfigureAwait(false);
-
-                        var assignmentIndex = gradingModel.Assignments.IndexOf(assignment);
-                        gradingModel.AssignmentGrades[assignmentIndex] =
-                            new AssignmentGrades
-                            {
-                                Grades = new double?[gradingModel.Students.Count]
-                            };
-
-                        foreach (var submission in response.StudentSubmissions)
-                        {
-                            var student = gradingModel.Students.SingleOrDefault(s => s.StudentId == submission.UserId);
-                            if (student == null) continue;
-
-                            var studentIndex = gradingModel.Students.IndexOf(student);
-                            gradingModel.AssignmentGrades[assignmentIndex].Grades[studentIndex] = submission.AssignedGrade;
-                        }
-                    }
+                    gradingModel.Assignments = await GetAssignments(model, classroomService, cancellationToken);
+                    gradingModel.Students = await GetStudents(model, classroomService, cancellationToken);
+                    gradingModel.AssignmentGrades = await GetGrades(model, gradingModel.Assignments, gradingModel.Students, classroomService, cancellationToken);
                 }
             }
             catch (Exception e)
@@ -276,71 +190,145 @@ namespace gcbulkgrader.Controllers
             var token = await appFlow.Flow.LoadTokenAsync(model.UserId, cancellationToken);
             var credential = new UserCredential(appFlow.Flow, model.UserId, token);
 
-            using (var classroomService = new ClassroomService(new BaseClientService.Initializer
+            try
             {
-                HttpClientInitializer = credential,
-                ApplicationName = "gc2lti"
-            }))
-            {
-                for (var assignmentIndex = 0; assignmentIndex < model.AssignmentGrades.Length; assignmentIndex++)
+                using (var classroomService = new ClassroomService(new BaseClientService.Initializer
                 {
-                    var assignmentGrades = model.AssignmentGrades[assignmentIndex];
-                    var assignment = model.Assignments[assignmentIndex];
-
-                    // Get the coursework
-                    var courseWorkRequest = classroomService.Courses.CourseWork.Get
-                    (
-                        model.CourseId,
-                        assignment.CourseWorkId
-                    );
-
-                    //var courseWork = await courseWorkRequest.ExecuteAsync(cancellationToken)
-                    //    .ConfigureAwait(false);
-
-                    // Get the students' submissions
-                    var submissionsRequest = classroomService.Courses.CourseWork.StudentSubmissions.List
-                    (
-                        model.CourseId,
-                        assignment.CourseWorkId
-                    );
-                    var submissionsResponse = await submissionsRequest.ExecuteAsync(cancellationToken)
-                        .ConfigureAwait(false);
-
-                    for (var studentIndex = 0; studentIndex < assignmentGrades.Grades.Length; studentIndex++)
+                    HttpClientInitializer = credential,
+                    ApplicationName = "gc2lti"
+                }))
+                {
+                    for (var assignmentIndex = 0; assignmentIndex < model.AssignmentGrades.Length; assignmentIndex++)
                     {
-                        var grade = assignmentGrades.Grades[studentIndex];
-                        var student = model.Students[studentIndex];
+                        var assignmentGrades = model.AssignmentGrades[assignmentIndex];
+                        var assignment = model.Assignments[assignmentIndex];
 
-                        var submission = submissionsResponse.StudentSubmissions
-                            .SingleOrDefault(s => s.UserId == student.StudentId);
+                        // Get the students' submissions
+                        var submissionsRequest = classroomService.Courses.CourseWork.StudentSubmissions.List
+                        (
+                            model.CourseId,
+                            assignment.CourseWorkId
+                        );
+                        var submissionsResponse = await submissionsRequest.ExecuteAsync(cancellationToken)
+                            .ConfigureAwait(false);
 
-                        if (submission != null)
+                        for (var studentIndex = 0; studentIndex < assignmentGrades.Grades.Length; studentIndex++)
                         {
-                            submission.AssignedGrade = grade;
-                            submission.DraftGrade = grade;
+                            var grade = assignmentGrades.Grades[studentIndex];
+                            var student = model.Students[studentIndex];
 
-                            var patchRequest = classroomService.Courses.CourseWork.StudentSubmissions.Patch
-                            (
-                                submission,
-                                submission.CourseId,
-                                submission.CourseWorkId,
-                                submission.Id
-                            );
-                            patchRequest.UpdateMask = "AssignedGrade,DraftGrade";
-                            await patchRequest.ExecuteAsync(cancellationToken).ConfigureAwait(false);
+                            var submission = submissionsResponse.StudentSubmissions
+                                .SingleOrDefault(s => s.UserId == student.StudentId);
+
+                            if (submission != null)
+                            {
+                                submission.AssignedGrade = grade;
+                                submission.DraftGrade = grade;
+
+                                var patchRequest = classroomService.Courses.CourseWork.StudentSubmissions.Patch
+                                (
+                                    submission,
+                                    submission.CourseId,
+                                    submission.CourseWorkId,
+                                    submission.Id
+                                );
+                                patchRequest.UpdateMask = "AssignedGrade,DraftGrade";
+                                await patchRequest.ExecuteAsync(cancellationToken).ConfigureAwait(false);
+                            }
                         }
                     }
                 }
+            }
+            catch (Exception e)
+            {
+                return StatusCode(StatusCodes.Status500InternalServerError, e);
             }
 
             var courseModel = new CourseModel
             {
                 CourseId = model.CourseId,
+                CourseName = model.CourseName,
                 PersonName = model.PersonName,
                 UserId = model.UserId
             };
 
             return RedirectToAction(nameof(BulkGrade), courseModel);
+        }
+
+        private static async Task<IList<AssignmentModel>> GetAssignments(CourseModel model, ClassroomService classroomService, CancellationToken cancellationToken)
+        {
+            var request = classroomService.Courses.CourseWork.List(model.CourseId);
+            var response = await request.ExecuteAsync(cancellationToken).ConfigureAwait(false);
+
+            var assignments = new List<AssignmentModel>();
+            foreach (var courseWork in response.CourseWork)
+            {
+                if (courseWork.AssociatedWithDeveloper.HasValue
+                    && courseWork.AssociatedWithDeveloper.Value
+                    && courseWork.MaxPoints.HasValue
+                    && courseWork.MaxPoints.Value > 0)
+                {
+                    assignments.Add(new AssignmentModel
+                    {
+                        CourseWorkId = courseWork.Id,
+                        CourseWorkName = courseWork.Title,
+                        MaxPoints = courseWork.MaxPoints.Value
+                    });
+                }
+            }
+
+            return assignments;
+        }
+
+        private static async Task<IList<StudentModel>> GetStudents(CourseModel model, ClassroomService classroomService, CancellationToken cancellationToken)
+        {
+            var request = classroomService.Courses.Students.List(model.CourseId);
+            var response = await request.ExecuteAsync(cancellationToken).ConfigureAwait(false);
+
+            var students = new List<StudentModel>();
+            foreach (var student in response.Students)
+            {
+                students.Add(new StudentModel
+                {
+                    StudentId = student.UserId,
+                    StudentName = student.Profile.Name.FullName
+                });
+            }
+
+            return students;
+        }
+
+        private async Task<AssignmentGrades[]> GetGrades(CourseModel model, IList<AssignmentModel> assignments, IList<StudentModel> students, ClassroomService classroomService, CancellationToken cancellationToken)
+        {
+            var assignmentGrades = new AssignmentGrades[assignments.Count];
+            foreach (var assignment in assignments)
+            {
+                // Get the student submissions for this assignment
+                var request = classroomService.Courses.CourseWork.StudentSubmissions.List
+                (
+                    model.CourseId,
+                    assignment.CourseWorkId
+                );
+                var response = await request.ExecuteAsync(cancellationToken).ConfigureAwait(false);
+
+                var assignmentIndex = assignments.IndexOf(assignment);
+                assignmentGrades[assignmentIndex] =
+                    new AssignmentGrades
+                    {
+                        Grades = new double?[students.Count]
+                    };
+
+                foreach (var submission in response.StudentSubmissions)
+                {
+                    var student = students.SingleOrDefault(s => s.StudentId == submission.UserId);
+                    if (student == null) continue;
+
+                    var studentIndex = students.IndexOf(student);
+                    assignmentGrades[assignmentIndex].Grades[studentIndex] = submission.AssignedGrade;
+                }
+            }
+
+            return assignmentGrades;
         }
     }
 }

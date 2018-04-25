@@ -1,9 +1,10 @@
-﻿using Microsoft.AspNetCore.Mvc.Rendering;
+﻿using System.Collections.Generic;
 
 namespace gcbulkgrader.Models
 {
     public class CourseSelectionModel : PersonModel
     {
-        public SelectList Courses { get; set; }
+        public IList<CourseModel> Courses { get; set; }
+        public string CourseId { get; set; }
     }
 }
